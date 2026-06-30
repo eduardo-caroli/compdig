@@ -5,7 +5,6 @@ use ieee.numeric_std.all;
 entity alu is
     port (
         --Sinais de controle
-        clk: STD_LOGIC;
         reset: STD_LOGIC;
 
         --Entradas
@@ -27,9 +26,7 @@ entity alu is
 end entity alu;
 
 architecture rtl of alu is
-    signal a_latch: STD_LOGIC_VECTOR(7 downto 0);
     signal b_latch: STD_LOGIC_VECTOR(7 downto 0);
-    signal cmd_latch: STD_LOGIC_VECTOR(3 downto 0);
 
     ------------ CARRY E SAIDA POR SINAL ------------
     ---- 8 BIT FULL ADDER
@@ -47,7 +44,7 @@ begin
             n => 8
         )
         port map(
-            a=>a_latch,
+            a=>a,
             b=>b_latch,
             cin=>cin,
             o=>o_adder,
@@ -60,23 +57,18 @@ begin
             n => 8
         )
         port map(
-            a => a_latch,
+            a => a,
             b => b_latch,
             cmd => cmd,
             o => o_logic
         );
+    -- B Latch - Quando inc ou dec, b_latch = 1. cc, b_latch = b
+    with cmd select
+        b_latch <= "00000001" when "0010", --inc
+                   "00000001" when "0011", --dec
+                   b   when others;
+                    
 
-    process(clk)
-    begin
-        --definindo latches
-        if cmd = "0010" or cmd = "0011" then --inc ou dec: operando b = 1
-            b_latch <= "00000001";
-        else
-            b_latch <= b;
-        end if;
-        a_latch <= a;
-        cmd_latch <= cmd;
-    end process;
     --Mux saida 
     with cmd select
         o <=    o_adder when "0000",
@@ -98,9 +90,9 @@ begin
                 '0'        when others;
 
     --Definindo flags
-    zero_f <= '1' when a_latch = (others => '0') else '0';
-    equal_f <= '1' when a_latch = b_latch else '0';
-    greater_f <= '1' when a_latch > b_latch else '0';
-    smaller_f <= '1' when a_latch < b_latch else '0';
+    zero_f <= '1' when a = (others => '0') else '0';
+    equal_f <= '1' when a = b_latch else '0';
+    greater_f <= '1' when a > b_latch else '0';
+    smaller_f <= '1' when a < b_latch else '0';
 
 end architecture rtl;
