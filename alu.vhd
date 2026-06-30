@@ -4,9 +4,6 @@ use ieee.numeric_std.all;
 
 entity alu is
     port (
-        --Sinais de controle
-        reset: STD_LOGIC;
-
         --Entradas
         cin: in STD_LOGIC;
         a: in STD_LOGIC_VECTOR(7 downto 0);
