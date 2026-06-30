@@ -1,0 +1,7 @@
+**/*.logs
+**/*.log
+**/*.xmsgs
+**/*.swp
+**/*.cmd
+**/*.swp
+**/isim/**
