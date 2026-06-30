@@ -33,6 +33,10 @@ architecture rtl of alu is
     signal o_adder: STD_LOGIC_VECTOR(7 downto 0);
     signal cout_adder: STD_LOGIC;
 
+    ---- 8 BIT FULL SUBTRACTOR
+    signal o_subtractor: STD_LOGIC_VECTOR(7 downto 0);
+    signal cout_subtractor: STD_LOGIC;
+
     --- LOGIC UNIT
     signal o_logic: STD_LOGIC_VECTOR(7 downto 0);
 begin
@@ -49,6 +53,18 @@ begin
             cin=>cin,
             o=>o_adder,
             cout=>cout_adder
+        );
+
+    eight_bit_full_subtractor : entity work.n_bit_full_subtractor
+        generic map(
+            n => 8
+        )
+        port map(
+            a=>a,
+            b=>b_latch,
+            bin=>cin,
+            o=>o_subtractor,
+            bout=>cout_subtractor
         );
 
     ---- LOGIC UNIT
@@ -72,7 +88,9 @@ begin
     --Mux saida 
     with cmd select
         o <=    o_adder when "0000",
-                o_adder when "0001",
+                o_subtractor when "0001",
+                o_adder when "0010",
+                o_subtractor when "0011",
                 o_logic when "0100",
                 o_logic when "0101",
                 o_logic when "0110",
@@ -85,9 +103,11 @@ begin
 
     --Mux Carry Out
     with cmd select
-        overflow_f <= cout_adder when "0000",
-                cout_adder when "0001",
-                '0'        when others;
+        overflow_f <=   cout_adder when "0000",
+                        cout_subtractor when "0001",
+                        cout_adder when "0010",
+                        cout_subtractor when "0011",
+                        '0' when others;
 
     --Definindo flags
     zero_f <= '1' when a = (others => '0') else '0';
