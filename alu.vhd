@@ -22,14 +22,14 @@ entity alu is
         equal_f: out STD_LOGIC;
         greater_f: out STD_LOGIC;
         smaller_f: out STD_LOGIC;
-        overflow_f: out STD_LOGIC;
+        overflow_f: out STD_LOGIC
     );
 end entity alu;
 
 architecture rtl of alu is
-    signal a_latch: in STD_LOGIC_VECTOR(7 downto 0);
-    signal b_latch: in STD_LOGIC_VECTOR(7 downto 0);
-    signal cmd_latch: in STD_LOGIC_VECTOR(3 downto 0);
+    signal a_latch: STD_LOGIC_VECTOR(7 downto 0);
+    signal b_latch: STD_LOGIC_VECTOR(7 downto 0);
+    signal cmd_latch: STD_LOGIC_VECTOR(3 downto 0);
 
     ------------ CARRY E SAIDA POR SINAL ------------
     ---- 8 BIT FULL ADDER
@@ -67,6 +67,7 @@ begin
         );
 
     process(clk)
+    begin
         --definindo latches
         if cmd = "0010" or cmd = "0011" then --inc ou dec: operando b = 1
             b_latch <= "00000001";
@@ -75,19 +76,26 @@ begin
         end if;
         a_latch <= a;
         cmd_latch <= cmd;
-
-    begin
     end process;
     --Mux saida 
     with cmd select
-        o <= o_adder    when cmd < "0010",                  -- RX + RY e RX + 1
-             o_logic    when "0100" <= cmd and cmd < "1010" -- OPS LOGICAS
-             (others => '0') when others;
+        o <=    o_adder when "0000",
+                o_adder when "0001",
+                o_logic when "0100",
+                o_logic when "0101",
+                o_logic when "0110",
+                o_logic when "0111",
+                o_logic when "1000",
+                o_logic when "1001",
+                o_logic when "1010",
+                o_logic when "1011",
+                (others => '0') when others;
 
     --Mux Carry Out
     with cmd select
-        cout <= cout_adder when cmd < "0010",
-                '0'        when others; 
+        overflow_f <= cout_adder when "0000",
+                cout_adder when "0001",
+                '0'        when others;
 
     --Definindo flags
     zero_f <= '1' when a_latch = (others => '0') else '0';

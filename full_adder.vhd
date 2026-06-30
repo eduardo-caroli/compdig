@@ -11,7 +11,6 @@ entity full_adder is
         cout: out STD_LOGIC
     );
 end entity full_adder;
-
 architecture rtl of full_adder is
 begin
     o <= cin xor (a xor b);
