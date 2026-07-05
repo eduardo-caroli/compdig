@@ -31,11 +31,9 @@ architecture rtl of control_unit is
     signal smaller_f:  STD_LOGIC;
     signal overflow_f:  STD_LOGIC;
 
-    --FLAG ESPECIAL
-    signal last_instruction_jmp_f: STD_LOGIC;
-
     ------------ CONTROLE DA RAM ------------
     --CONTROLE DA RAM
+    signal clk_fwd:     STD_LOGIC;
     signal we:          STD_LOGIC;
     signal mar_u:       UNSIGNED(7 downto 0);
     --SAIDA DA RAM
@@ -62,16 +60,14 @@ architecture rtl of control_unit is
 
     ------------ VIRTUAL INSTRUCTION DECODER ------------
     --ENTRADAS
-    signal vi_decoder_in:       STD_LOGIC_VECTOR(7 downto 0);
+    signal curr_instruction        : STD_LOGIC_VECTOR(7 downto 0);
     --SAIDAS
     signal virtual_instruction: STD_LOGIC_VECTOR(4 downto 0);
     signal is_two_step_instruction: STD_LOGIC;
     signal is_arith_logic_instruction: STD_LOGIC;
-    signal is_mem_instruction: STD_LOGIC;
-    signal is_push: STD_LOGIC;
 
     ------------ CONTROLE INTERNO -------------
-    type    cpu_state   is  (FETCH_FIRST_INSTRUCTION, CYCLE_ONE, CYCLE_TWO, IDLE);
+    type    cpu_state   is  (FETCH_FIRST_INSTRUCTION, CYCLE_ONE, CYCLE_TWO);
     signal  curr_state  :   cpu_state;
     type    instruction_t is(
             INST_ADD,INST_SUB,INST_INC,INST_DEC,INST_AND,
@@ -102,28 +98,27 @@ architecture rtl of control_unit is
             INST_HALT,
             INVALID
       );
-    signal  instruction : instruction_t;
+    signal  instruction_type : instruction_t;
+
 
 begin
     ------------ VIRTUAL INSTRUCTION DECODER ------------
     --INSTANCIACAO
     vi_decoder : entity work.virtual_instruction_decoder
         port map(
-            opcode => vi_decoder_in(7 downto 4),
-            suffix => vi_decoder_in(1 downto 0),
-            rx     => vi_decoder_in(3 downto 2),
+            opcode => curr_instruction(7 downto 4),
+            suffix => curr_instruction(1 downto 0),
+            rx     => curr_instruction(3 downto 2),
             virtual_instruction => virtual_instruction,
             is_two_step => is_two_step_instruction,
-            is_arith_logic_instruction => is_arith_logic_instruction,
-            is_mem_instruction => is_mem_instruction,
-            is_push => is_push
+            is_arith_logic_instruction => is_arith_logic_instruction
         );
 
     ------------- ALU ------------
     --INSTANCIACAO
     alu : entity work.alu
         port map(
-            cin => zero_f,
+            cin => overflow_f,
             a => alu_a,
             b => alu_b,
             cmd => alu_cmd,
@@ -141,7 +136,7 @@ begin
     --INSTANCIACAO
      ram : entity work.ram
          port map(
-             clk => clk,
+             clk => clk_fwd,
              we  => we,
              data => ram_data_in,
              addr => mar_u,
@@ -154,6 +149,61 @@ begin
      process(clk, reset)
         variable result: STD_LOGIC_VECTOR(7 downto 0);
         variable pc_p_1: STD_LOGIC_VECTOR := (others => '0');
+
+        ------------ PROCEDURES ------------
+        procedure update_pc_with_variable(
+            variable new_pc: in   STD_LOGIC_VECTOR(7 downto 0)
+        ) is
+        begin
+            --Buscar instrucao
+            mar <= new_pc;
+            we <= '0';
+            --Atualizando SP: Incrementar
+            alu_cmd <= "0010";
+            alu_a <= new_pc;
+            pc <= new_pc;
+        end procedure update_pc_with_variable;
+
+        procedure update_pc_with_signal(
+            signal new_pc: in   STD_LOGIC_VECTOR(7 downto 0)
+        ) is
+        begin
+            --Buscar instrucao
+            mar <= new_pc;
+            we <= '0';
+            --Atualizando SP: Incrementar
+            alu_cmd <= "0010";
+            alu_a <= new_pc;
+            pc <= new_pc;
+        end procedure update_pc_with_signal;
+
+        procedure update_register(
+            signal r_sel: in STD_LOGIC_VECTOR(1 downto 0);
+            signal value: in STD_LOGIC_VECTOR(7 downto 0)
+        ) is
+        begin
+            if r_sel = "00" then
+               a <= value;
+            elsif r_sel = "01" then
+               b <= value;
+            elsif r_sel = "10" then
+               c <= value;
+            else
+               d <= value;
+             end if;
+        end procedure update_register;
+
+        procedure write_to_ram(
+            signal data: STD_LOGIC_VECTOR(7 downto 0);
+            signal address: STD_LOGIC_VECTOR(7 downto 0)
+        ) is
+        begin
+            we <= '1';
+            mar <= address;
+            ram_data_in <= data;
+        end procedure write_to_ram;
+
+
      begin
          if reset = '1' then
             curr_state <= FETCH_FIRST_INSTRUCTION;
@@ -164,8 +214,8 @@ begin
             d <= (others => '0');
             pc <= (others => '0');
             ir <= (others => '0');
-            sp <= (others => '1');
-            sp_p_1 <= (others => '1');
+            sp <= (0 => '0', others => '1');
+            sp_p_1 <= (0 => '0', others => '1');
             mbr <= (others => '0');
             mar <= (others => '0');
             zero_f <= '0';
@@ -173,142 +223,142 @@ begin
             greater_f <= '0';
             smaller_f <= '0';
             overflow_f <= '0';
-            last_instruction_jmp_f <= '0';
          elsif rising_edge(clk) then
-            --Definindo valores dos operandos
-            if curr_state = CYCLE_ONE then
+            if curr_state = FETCH_FIRST_INSTRUCTION then
+                update_pc_with_signal(pc);
+                curr_state <= CYCLE_ONE;
+            elsif curr_state = CYCLE_ONE then
                 --Atualizando IR com a instrução atual
                 ir <= ram_data_out;
                 --Zerando we para evitar escritas espurias
                 --caso we = '1' no fim do ciclo passado
                 we <= '0';
-                --Se a ultima instrucao foi jmp
-                --precisamos atualizar pc_p_1
-                if last_instruction_jmp_f = '1' then
-                    last_instruction_jmp_f <= '0';
-                    pc_p_1 := alu_out;
-                end if;
-                if is_two_step_instruction = '1' then
+                --Ao final de uma instrucao sempre atualizamos pc_p_1
+                pc_p_1 := alu_out;
+                if is_two_step_instruction = '0' then
+                    if instruction_type = INST_STR THEN
+                        write_to_ram(rx, ry);
+                    elsif instruction_type = INST_MOV THEN
+                        update_register(rx_sel, ry);
+                    end if;
+                    --Setamos pc aqui porque as outras instrucoes (que alteram o valor 
+                    --do sinal) poderao sobrescreve-las
+                    --Abaixo desta linha todas as instrucoes que podem alterar o valor de pc
+                    --Abaixo implementamos todas as instruções de jump
+                    if instruction_type = INST_HALT then
+                        update_pc_with_signal(pc);
+                    else
+                        update_pc_with_variable(pc_p_1);
+                    end if;
+                    if (
+                        (instruction_type = INST_JMPR) or (instruction_type = INST_BZ and zero_f= '1') or
+                        (instruction_type = INST_BNZ and zero_f = '0') or (instruction_type = INST_BCC and overflow_f = '0') or
+                        (instruction_type = INST_BCS and overflow_f = '1') or (instruction_type =  INST_BEQ and equal_f = '1') or
+                        (instruction_type = INST_BNEQ and equal_f = '0') or (instruction_type = INST_BGT and greater_f = '1') or
+                        (instruction_type = INST_BLT and smaller_f = '1')
+                    ) then
+                        update_pc_with_signal(rx);
+                    end if;
+                    curr_state <= CYCLE_ONE; -- NAO MUDA
+                else --Instrucao deve ser executada em dois ciclos
                     if is_arith_logic_instruction = '1'then
                        alu_a <= rx;
                        alu_b <= ry;
                        alu_cmd <= virtual_instruction(3 downto 0);
                        curr_state <= CYCLE_TWO;
-                    elsif is_mem_instruction = '1' then
-                        --Se entra qui, a instrucao exige acesso a memoria (leitura)
-                        --Aqui definimos o endereco de acesso, apenas.
-                        --Caso push ou pop, tambem precisamos incrementar / decrementar
-                        --SP.
-                        if instruction = INST_POP then
-                            mar <= sp_p_1;
-                            we <= '0';
-                            --Atualizando SP: Incrementar
-                            alu_cmd <= "0010";
-                            alu_a <= sp_p_1;
-                            sp <= sp_p_1;
-                        elsif instruction = INST_LD then
-                            mar <= pc_p_1;
-                            we <= '0';
-                            --Atualizando parcialmente PC
-                            --Porque no segundo ciclo soma-se apenas 1
-                            --e a instrucao exige pc <= pc + 2
-                            pc <= pc_p_1;
-                            alu_a <= pc_p_1;
-                            alu_cmd <= "0010";
-                        elsif instruction = INST_LDR then
-                            mar <= ry;
-                            we <= '0';
-                        elsif instruction = INST_JMP then
-                            mar <= pc_p_1;
-                            we <= '0';
-                        end if;
-                        curr_state <= CYCLE_TWO;
-                    elsif is_push = '1' then
-                        --No acso do PUSH, precisamos apenas atualizat SP.
+                    elsif instruction_type = INST_PUSH then
+                        --No acso do PUSH, precisamos  atualizar SP.
                         alu_cmd <= "0011"; --DEC
                         alu_a <= sp;
                         sp_p_1 <= sp;
-                        --E escrever algo na pilha.
-                        mar <= sp;
-                        we <= '1';
-                        ram_data_in <= rx;
-                        curr_state <= CYCLE_TWO;
-                    elsif instruction = INST_ST then
+                        --e escrever algo na pilha.
+                        write_to_ram(rx, sp);
+                    --Se entra qui, a instrucao exige acesso a memoria (leitura)
+                    --Aqui definimos o endereco de acesso, apenas.
+                    --Caso push ou pop, tambem precisamos incrementar / decrementar
+                    --SP.
+                    elsif instruction_type = INST_POP then
+                        mar <= sp_p_1;
+                        we <= '0';
+                        --Atualizando SP: Incrementar
+                        alu_cmd <= "0010";
+                        alu_a <= sp_p_1;
+                        sp <= sp_p_1;
+                    --Nas 2 instrucoes abaixo atualizamos parcialmente PC
+                    --Porque no segundo ciclo soma-se apenas 1
+                    --e a instrucao exige pc <= pc + 2
+                    elsif instruction_type = INST_ST then
                         pc <= pc_p_1;
                         alu_a <= pc_p_1;
                         alu_cmd <= "0010";
+                    elsif instruction_type = INST_LD then
+                        pc <= pc_p_1;
+                        alu_a <= pc_p_1;
+                        alu_cmd <= "0010";
+                        mar <= pc_p_1;
+                        we <= '0';
+                    elsif instruction_type = INST_LDR then
+                        mar <= ry;
+                        we <= '0';
+                    elsif instruction_type = INST_JMP then
+                        mar <= pc_p_1;
+                        we <= '0';
                     end if;
-                else
-                    
                 end if;
             elsif curr_state = CYCLE_TWO then
-                --Atualizando registradores que entraram na ALU
-                if instruction = INST_POP then
-                    sp_p_1 <= alu_out;
-                elsif instruction = INST_LD then
-                    pc_p_1 := alu_out;
-                elsif instruction = INST_PUSH then
-                    sp <= alu_out; 
-                elsif instruction = INST_ST then
-                    pc_p_1 := alu_out;
-                end if;
-                --Coletar resultado (Leitura da memoria ou ALU), se houver
                 if is_arith_logic_instruction = '1' then
-                    result := alu_out; 
-                elsif is_mem_instruction = '1' then
-                    result := ram_data_out;
+                    --Atualizamos o registrador com o resultado da ALU
+                    update_register(rx_sel, alu_out);
+                    --Atualizamos as flags
+                    zero_f <= zero_f_out;
+                    equal_f <= equal_f_out;
+                    overflow_f <= overflow_f_out;
+                    greater_f <= greater_f_out;
+                    smaller_f <= smaller_f_out;
+                    --E atualizamos PC
+                    update_pc_with_variable(pc_p_1);
+                elsif instruction_type = INST_PUSH then
+                    --Atualizamos SP
+                    sp <= alu_out;
+                    --E atualizamos pc
+                    update_pc_with_variable(pc_p_1);
+                elsif instruction_type = INST_POP then
+                    --Atualizamos SP+1
+                    sp_p_1 <= alu_out;
+                    --Escrevemos MEM[SP+1] em RX
+                    update_register(rx_sel, ram_data_out);
+                    update_pc_with_variable(pc_p_1);
+                elsif instruction_type = INST_ST then
+                    --Atualizamos pc_p_1 com (PC + 1)+1
+                    pc_p_1 := alu_out;
+                    --Aqui, sp já é sp+1. escrevemos RX para MEM[SP+1]
+                    write_to_ram(rx, pc);
+                    --E atualizamos pc <- PC + 2
+                    update_pc_with_variable(pc_p_1);
+                elsif instruction_type = INST_LD then
+                    --Atualizamos pc_p_1 com (PC + 1)+1
+                    pc_p_1 := alu_out;
+                    --Atualizamos RX com o valor buscado da memória
+                    update_register(rx_sel, ram_data_out);
+                    --Atualizar PC <- PC+2
+                    update_pc_with_variable(pc_p_1);
+                 elsif instruction_type = INST_LDR then
+                    --Escrevemos o valor MEM[RY] em RX
+                    update_register(rx_sel, ram_data_out);
+                    --E atualizamos PC <- PC + 1
+                    update_pc_with_variable(pc_p_1);
+                elsif instruction_type = INST_JMP then
+                    update_pc_with_signal(ram_data_out);
                 end if;
-                --Escrever resultado no local apropriado
-                if (
-                    instruction = INST_POP or
-                    instruction = INST_LD  or
-                    instruction = INST_LDR or
-                    is_arith_logic_instruction = '1'
-                )then
-                    if rx_sel = "00" then
-                        a <= result;
-                    elsif rx_sel = "01" then 
-                        b <= result;
-                    elsif rx_sel = "10" then 
-                        c <= result;
-                    elsif rx_sel = "11" then 
-                        d <= result;
-                    end if;
-                    --Atualizar PC adequadamente 
-                    alu_a <= pc;
-                    if instruction = INST_LD then
-                        alu_b <= "00000010";
-                    else
-                        alu_b <= "00000001";
-                    end if;
-                    alu_cmd <= "0000"; --SOMA SIMPLES
-                    --Buscar próxima instrução
-                    mar <= pc_p_1;
-                    we <= '0';
-                elsif instruction = INST_JMP then
-                    --Atualizar PC adequadamente
-                    pc <= result;
-                    alu_a <= result;
-                    alu_cmd <= "0010";
-                    last_instruction_jmp_f <= '1';
-                    --Buscar proxima instrucao
-                    mar <= result;
-                    we <= '0';
-                end if;
-            --instrucoes aqui estao em ir
             end if;
          end if;
      end process;
 
-    with curr_state select rx_sel <=
-        ram_data_out(3 downto 2) when CYCLE_ONE,
-        ir(3 downto 2)           when CYCLE_TWO,
-        "00"                     when others;
+     clk_fwd <= not clk;
 
-    with curr_state select ry_sel <=
-        ram_data_out(1 downto 0) when CYCLE_ONE,
-        ir(1 downto 0)           when CYCLE_TWO,
-        "00"                     when others;
+    rx_sel <= curr_instruction(3 downto 2);
+
+    ry_sel <= curr_instruction(1 downto 0);
 
      with rx_sel select rx <=
         a when "00",
@@ -322,13 +372,13 @@ begin
         c when "10",
         d when others;
 
-    with curr_state select vi_decoder_in <=
+    with curr_state select curr_instruction <=
         ram_data_out when CYCLE_ONE,
         ir           when CYCLE_TWO,
         (others => '0') when others;
 
     with virtual_instruction select
-        instruction <=
+        instruction_type <=
             INST_ADD  when "00000",
             INST_SUB  when "00001",
             INST_INC  when "00010",

@@ -8,9 +8,7 @@ entity virtual_instruction_decoder is
         rx                  : in  std_logic_vector(1 downto 0);
         virtual_instruction : out std_logic_vector(4 downto 0);
         is_two_step         : out std_logic;
-        is_arith_logic_instruction : out std_logic;
-        is_mem_instruction : out std_logic;
-        is_push            : out std_logic
+        is_arith_logic_instruction : out std_logic
     );
 end entity;
 
@@ -184,27 +182,34 @@ begin
            (vi = "00001") or -- SUB
            (vi = "00010") or -- INC
            (vi = "00011") or -- DEC
-           (vi = "00101") or -- AND
-           (vi = "00110") or -- OR
-           (vi = "00111") or -- NOT
-           (vi = "01000") or -- XOR
-           (vi = "01001") or -- ROL
-           (vi = "01010") or -- ROR
-           (vi = "01011") or -- LSL
-           (vi = "01100") or -- LSR
-           (vi = "01110") or -- LSR
-           (vi = "01101") or -- PUSH
-           (vi = "01110") or -- POP
-           (vi = "10000") or -- LD
-           (vi = "10001")    -- LDR
+           (vi = "00100") or -- AND
+           (vi = "00101") or -- OR
+           (vi = "00110") or -- NOT
+           (vi = "00111") or -- XOR
+           (vi = "01000") or -- ROL
+           (vi = "01001") or -- ROR
+           (vi = "01010") or -- LSL
+           (vi = "01011") or -- LSR
+           (vi = "01100") or -- PUSH
+           (vi = "01101") or -- POP
+           (vi = "01110") or -- ST
+           (vi = "01111") or -- LD
+           (vi = "10000") or -- LDR
+           (vi = "10011")    -- JMP
            else '0';
 
-     is_arith_logic_instruction <= '1' when vi < "01100" else '0'; 
-     is_push <= '1' when vi = "01100" else '0';
-     is_mem_instruction <= '1' when 
-            (vi = "01101") or --POP
-            (vi = "01111") or --LD
-            (vi = "10000") or --LDR
-            (vi = "10011")    --JMP
-            else '0';
+     is_arith_logic_instruction <= '1' when 
+           (vi = "00000") or -- ADD
+           (vi = "00001") or -- SUB
+           (vi = "00010") or -- INC
+           (vi = "00011") or -- DEC
+           (vi = "00100") or -- AND
+           (vi = "00101") or -- OR
+           (vi = "00110") or -- NOT
+           (vi = "00111") or -- XOR
+           (vi = "01000") or -- ROL
+           (vi = "01001") or -- ROR
+           (vi = "01010") or -- LSL
+           (vi = "01011")    -- LSR
+           else '0';
 end architecture;

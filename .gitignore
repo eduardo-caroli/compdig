@@ -2,6 +2,8 @@
 **/*.log
 **/*.xmsgs
 **/*.swp
+**/*.swm
+**/*.swn
 **/*.cmd
 **/*.swp
 **/isim/**

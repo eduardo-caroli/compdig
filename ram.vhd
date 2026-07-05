@@ -19,12 +19,14 @@ begin
     process(clk)
         variable    addr_int: integer;
     begin
-        addr_int := to_integer(addr);
-        if we = '1' then
-            memory(addr_int + 7 downto addr_int) <= data;
-            data_out <= data;
-        else
-            data_out <= memory(addr_int + 7 downto addr_int);
+        if rising_edge(clk) then
+            addr_int := to_integer(addr);
+            if we = '1' then
+                memory(8*addr_int + 7 downto 8*addr_int) <= data;
+                data_out <= data;
+            else
+                data_out <= memory(addr_int + 7 downto addr_int);
+            end if;
         end if;
     end process;
 end architecture rtl;
