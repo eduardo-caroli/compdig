@@ -236,6 +236,7 @@ begin
                 --Ao final de uma instrucao sempre atualizamos pc_p_1
                 pc_p_1 := alu_out;
                 if is_two_step_instruction = '0' then
+                    curr_state <= CYCLE_ONE; -- NAO MUDA
                     if instruction_type = INST_STR THEN
                         write_to_ram(rx, ry);
                     elsif instruction_type = INST_MOV THEN
@@ -259,13 +260,12 @@ begin
                     ) then
                         update_pc_with_signal(rx);
                     end if;
-                    curr_state <= CYCLE_ONE; -- NAO MUDA
                 else --Instrucao deve ser executada em dois ciclos
+                    curr_state <= CYCLE_TWO;
                     if is_arith_logic_instruction = '1'then
                        alu_a <= rx;
                        alu_b <= ry;
                        alu_cmd <= virtual_instruction(3 downto 0);
-                       curr_state <= CYCLE_TWO;
                     elsif instruction_type = INST_PUSH then
                         --No acso do PUSH, precisamos  atualizar SP.
                         alu_cmd <= "0011"; --DEC
@@ -306,6 +306,7 @@ begin
                     end if;
                 end if;
             elsif curr_state = CYCLE_TWO then
+                curr_state <= CYCLE_ONE;
                 if is_arith_logic_instruction = '1' then
                     --Atualizamos o registrador com o resultado da ALU
                     update_register(rx_sel, alu_out);
