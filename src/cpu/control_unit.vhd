@@ -5,7 +5,41 @@ use ieee.numeric_std.all;
 entity control_unit is
     port(
         clk:    in      STD_LOGIC;
-        reset:  in      STD_LOGIC
+        reset:  in      STD_LOGIC;
+
+        ------ RAM CONTROL ------
+        we  :   out     STD_LOGIC;
+        mar_u:  out     UNSIGNED(7 downto 0);
+        ram_data_in: out STD_LOGIC_VECTOR(7 downto 0);
+        ram_data_out: in STD_LOGIC_VECTOR(7 downto 0);
+        
+        ------ ALU CONTROL ------
+        alu_a:   out STD_LOGIC_VECTOR(7 downto 0); --Entrada A da ALU
+        alu_b:   out STD_LOGIC_VECTOR(7 downto 0); --Entrada B da ALU
+        alu_out: in STD_LOGIC_VECTOR(7 downto 0);
+        --COMANDO
+        alu_cmd: out    STD_LOGIC_VECTOR(3 downto 0);
+        --SAIDA DA ALU
+        zero_f_out: in  STD_LOGIC;
+        equal_f_out: in	STD_LOGIC;
+        greater_f_out: in	STD_LOGIC;
+        smaller_f_out: in	STD_LOGIC;
+        overflow_f_out: in	STD_LOGIC;
+        --debug_outs
+    --REGISTRADORES
+    a_out: out        STD_LOGIC_VECTOR(7 downto 0);
+    b_out: out        STD_LOGIC_VECTOR(7 downto 0);
+    c_out: out        STD_LOGIC_VECTOR(7 downto 0);
+    d_out: out        STD_LOGIC_VECTOR(7 downto 0);
+
+    --REGISTRADORES DE CONTROLE
+    pc_out: out       STD_LOGIC_VECTOR(7 downto 0);
+    ir_out: out       STD_LOGIC_VECTOR(7 downto 0);
+    sp_out: out       STD_LOGIC_VECTOR(7 downto 0);
+    sp_p_1_out: out   STD_LOGIC_VECTOR(7 downto 0);
+    mbr_out: out      STD_LOGIC_VECTOR(7 downto 0);
+    mar_out: out      STD_LOGIC_VECTOR(7 downto 0);
+    is_two_step_instruction_out: out STD_LOGIC
     );
 end entity control_unit;
 
@@ -31,32 +65,11 @@ architecture rtl of control_unit is
     signal smaller_f:  STD_LOGIC;
     signal overflow_f:  STD_LOGIC;
 
-    ------------ CONTROLE DA RAM ------------
-    --CONTROLE DA RAM
-    signal clk_fwd:     STD_LOGIC;
-    signal we:          STD_LOGIC;
-    signal mar_u:       UNSIGNED(7 downto 0);
-    --SAIDA DA RAM
-    signal ram_data_in: STD_LOGIC_VECTOR(7 downto 0);
-    signal ram_data_out: STD_LOGIC_VECTOR(7 downto 0);
-
-    ------------ CONTROLE DA ALU ------------
     --REGISTER MUX
     signal rx:      STD_LOGIC_VECTOR(7 downto 0); --Durante "leitura da instrucao", valor de RX
     signal rx_sel:  STD_LOGIC_VECTOR(1 downto 0);
     signal ry:      STD_LOGIC_VECTOR(7 downto 0); --e de RY
     signal ry_sel:  STD_LOGIC_VECTOR(1 downto 0);
-    signal alu_a:   STD_LOGIC_VECTOR(7 downto 0); --Entrada A da ALU
-    signal alu_b:   STD_LOGIC_VECTOR(7 downto 0); --Entrada B da ALU
-    signal alu_out: STD_LOGIC_VECTOR(7 downto 0);
-    --COMANDO
-    signal alu_cmd: STD_LOGIC_VECTOR(3 downto 0);
-    --SAIDA DA ALU
-    signal zero_f_out: STD_LOGIC;
-    signal equal_f_out: STD_LOGIC;
-    signal greater_f_out: STD_LOGIC;
-    signal smaller_f_out: STD_LOGIC;
-    signal overflow_f_out: STD_LOGIC;
 
     ------------ VIRTUAL INSTRUCTION DECODER ------------
     --ENTRADAS
@@ -114,41 +127,12 @@ begin
             is_arith_logic_instruction => is_arith_logic_instruction
         );
 
-    ------------- ALU ------------
-    --INSTANCIACAO
-    alu : entity work.alu
-        port map(
-            cin => overflow_f,
-            a => alu_a,
-            b => alu_b,
-            cmd => alu_cmd,
-
-            o => alu_out,
-
-            zero_f => zero_f_out,
-            equal_f => equal_f_out,
-            greater_f => greater_f_out,
-            smaller_f => smaller_f_out,
-            overflow_f => overflow_f_out
-        );
-
-    ------------ RAM ------------
-    --INSTANCIACAO
-     ram : entity work.ram
-         port map(
-             clk => clk_fwd,
-             we  => we,
-             data => ram_data_in,
-             addr => mar_u,
-             data_out => ram_data_out
-         );
-
      mar_u <= unsigned(mar);
 
     ------------ PROCESSO ------------
      process(clk, reset)
         variable result: STD_LOGIC_VECTOR(7 downto 0);
-        variable pc_p_1: STD_LOGIC_VECTOR := (others => '0');
+        variable pc_p_1: STD_LOGIC_VECTOR(7 downto 0) := (others => '0');
 
         ------------ PROCEDURES ------------
         procedure update_pc_with_variable(
@@ -203,6 +187,15 @@ begin
             ram_data_in <= data;
         end procedure write_to_ram;
 
+        procedure write_to_ram_variable_address(
+            signal data: STD_LOGIC_VECTOR(7 downto 0);
+            variable address: STD_LOGIC_VECTOR(7 downto 0)
+        ) is
+        begin
+            we <= '1';
+            mar <= address;
+            ram_data_in <= data;
+        end procedure write_to_ram_variable_address;
 
      begin
          if reset = '1' then
@@ -237,9 +230,7 @@ begin
                 pc_p_1 := alu_out;
                 if is_two_step_instruction = '0' then
                     curr_state <= CYCLE_ONE; -- NAO MUDA
-                    if instruction_type = INST_STR THEN
-                        write_to_ram(rx, ry);
-                    elsif instruction_type = INST_MOV THEN
+                    if instruction_type = INST_MOV THEN
                         update_register(rx_sel, ry);
                     end if;
                     --Setamos pc aqui porque as outras instrucoes (que alteram o valor 
@@ -291,6 +282,7 @@ begin
                         pc <= pc_p_1;
                         alu_a <= pc_p_1;
                         alu_cmd <= "0010";
+                        write_to_ram_variable_address(rx, pc_p_1);
                     elsif instruction_type = INST_LD then
                         pc <= pc_p_1;
                         alu_a <= pc_p_1;
@@ -300,6 +292,8 @@ begin
                     elsif instruction_type = INST_LDR then
                         mar <= ry;
                         we <= '0';
+                    elsif instruction_type = INST_STR then
+                        write_to_ram(rx, ry);
                     elsif instruction_type = INST_JMP then
                         mar <= pc_p_1;
                         we <= '0';
@@ -333,7 +327,6 @@ begin
                     --Atualizamos pc_p_1 com (PC + 1)+1
                     pc_p_1 := alu_out;
                     --Aqui, sp já é sp+1. escrevemos RX para MEM[SP+1]
-                    write_to_ram(rx, pc);
                     --E atualizamos pc <- PC + 2
                     update_pc_with_variable(pc_p_1);
                 elsif instruction_type = INST_LD then
@@ -348,14 +341,14 @@ begin
                     update_register(rx_sel, ram_data_out);
                     --E atualizamos PC <- PC + 1
                     update_pc_with_variable(pc_p_1);
+                elsif instruction_type = INST_STR then
+                    update_pc_with_variable(pc_p_1);
                 elsif instruction_type = INST_JMP then
                     update_pc_with_signal(ram_data_out);
                 end if;
             end if;
          end if;
      end process;
-
-     clk_fwd <= not clk;
 
     rx_sel <= curr_instruction(3 downto 2);
 
@@ -412,4 +405,20 @@ begin
             INST_HALT when "11101",
             INVALID   when others;
 
+--debug outs
+
+    --REGISTRADORES
+    a_out <= a;
+    b_out <= b;
+    c_out <= c;
+    d_out <= d;
+
+    --REGISTRADORES DE CONTROLE
+    pc_out <= pc;
+    ir_out <= ir;
+    sp_out <= sp;
+    sp_p_1_out <= sp_p_1;
+    mbr_out <= mbr;
+    mar_out <= mar;
+    is_two_step_instruction_out <= is_two_step_instruction;
 end architecture rtl;

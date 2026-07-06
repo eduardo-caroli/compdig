@@ -107,7 +107,7 @@ begin
                         '0' when others;
 
     --Definindo flags
-    zero_f <= '1' when a = (others => '0') else '0';
+    zero_f <= '1' when a = "00000000" else '0';
     equal_f <= '1' when a = b_latch else '0';
     greater_f <= '1' when a > b_latch else '0';
     smaller_f <= '1' when a < b_latch else '0';

@@ -195,6 +195,7 @@ begin
            (vi = "01110") or -- ST
            (vi = "01111") or -- LD
            (vi = "10000") or -- LDR
+           (vi = "10001") or -- STR
            (vi = "10011")    -- JMP
            else '0';
 
